@@ -33,13 +33,13 @@ my_posts = [
     }
  ]
 
-# Creates a function to find individual posts. For post in posts, if post in posts list has id = id argument return post
+# For post in my posts list, if post has id = passed in id param, return post
 def find_post(id):
     for p in my_posts:
         if p["id"] == id:
             return p
 
-
+# For post in my post list, if post has id = passed in id param, return index of post
 def find_index_post(id):
     for i, p in enumerate(my_posts):
         if p['id'] == id:
@@ -50,7 +50,13 @@ def find_index_post(id):
 async def login():
     return {"message": "Welcome to My API!"}
 
-# Create post
+
+# Retrieve all post from server
+@app.get("/posts")
+async def get_posts():
+    return {"data": my_posts}
+
+# Create post, adds post to empty dict, adds unique id to post, appends new post to my post list. returns 201 created status code
 @app.post("/posts", status_code=status.HTTP_201_CREATED)
 async def create_post(post : Post):
     post_dict = dict(post)
@@ -58,37 +64,34 @@ async def create_post(post : Post):
     my_posts.append(post_dict)
     return {"data": post_dict}
 
-# Retrieve all post from server
-@app.get("/posts")
-async def get_posts():
-    return {"data": my_posts}
-
-
-# client provide a path param 'id' to retrieve individual post. Path param passed into find_post function, if not found raise expection, if found return post
+# client provide a path param 'id' to retrieve individual post. Path param passed into find_post function, if not found raise http exception built in to fastapi, if found return post
 @app.get("/posts/{id}")
 async def get_post(id: int):
     post = find_post(id)
     if not post:
-        raise HTTPException(status_code = status.HTTP_404_NOT_FOUND, detail = f"post with id: {id} was not found")
+        raise HTTPException(
+            status_code = status.HTTP_404_NOT_FOUND, 
+            detail = f"post with id: {id} was not found"
+            )
     return {"post_details": post}
 
 
-# delete individual post
+# delete individual post. Uses find index post function which returns the index of post with passed in id, if index exists pop index from my post list and return 204 response
 @app.delete("/posts/{id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_post(id: int):
     index = find_index_post(id)
     if index == None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id: {id} does not exist")
     my_posts.pop(index)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return Response(status_code=status.HTTP_204_NO_CONTENT, detail=f"post {id} successfully deleted")
 
-# Update individual post
+# Update individual post. User send put request with the id for specifc post. We find the index of the post, if exists we Takes post from front end,convert to dictionary and assigns this post the id of the passed in id, then replace the post in my post lists with the new passed in post, then returns new post.
 @app.put("/posts/{id}")
 async def update_posts(id: int, post: Post):
     index = find_index_post(id)
     if index == None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id: {id} does not exist")
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
     post_dict = dict(post)
     post_dict['id']= id
     
