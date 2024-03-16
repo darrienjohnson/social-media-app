@@ -1,32 +1,17 @@
-from http.client import ImproperConnectionState
 from fastapi import FastAPI, Response, status, HTTPException, Depends
-from curses.ascii import HT
-from hashlib import new
-from lib2to3.pytree import Base
-from operator import imod, index
-from pickle import NONE
-from typing import Optional
 from fastapi.params import Body
-from pydantic import BaseModel
+from random import randrange
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from random import randrange
-from sqlalchemy.orm import Session
 import time
-from . import models
+from sqlalchemy.orm import Session
+from . import pydantic_models, sql_models
 from .database import engine, get_db
 
 
-models.Base.metadata.create_all(bind=engine)
+sql_models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI() # fast API instance
-
-
-# Pydantic validates the received input data matches the expected data defined in the data model (schema).
-class Post(BaseModel):
-    title: str
-    content: str
-    published: bool = True
 
 # Psycopg2 enables use of PostgreSQL databases in application. Cursor object allows you to execute SQL commands against a PostgreSQL database.
 while True:
@@ -40,66 +25,38 @@ while True:
         print("Error: ", error)
         time.sleep(3)
 
-# temp list storage for saving post
-my_posts = [
-    {
-        "title": "title of post 1",
-        "content": "content of post 1",
-        "id": 1
-    },
-    {
-        "title": "favorite foods",
-        "content": "i like pizza",
-        "id": 2
-    }
- ]
-
-# For post in my posts list, if post has id = passed in id param, return post
-def find_post(id):
-    for p in my_posts:
-        if p["id"] == id:
-            return p
-
-# For post in my post list, if post has id = passed in id param, return index of post
-def find_index_post(id):
-    for i, p in enumerate(my_posts):
-        if p['id'] == id:
-            return i
-
 
 @app.get("/")
 async def login():
     return {"message": "Welcome to My API!"}
 
-
+#query() object creates the SQL query so we dont have to when we print(posts) it returns 'SELECT posts.id AS posts_id, posts.title AS posts_title, posts.content AS posts_content, posts.published AS posts_published, posts.create_at AS posts_create_at'. .all() returns the results represented by this _query.Query as a list. This results in an execution of the underlying SQL statement.
 @app.get("/sqlalchemy")
 def test_posts(db: Session = Depends(get_db)):
-
-    db.query(models.Post).all()
-
+    posts = db.query(sql_models.Post).all()
+    print(posts)
     return {"status": "success"}
 
 
-# Retrieve all post from database. Cursor object allows you to execute SQL commands against a PostgreSQL database. All rows from posts table selected. Fetchall() retrieves all the rows selected above, then return data
+# Retrieve all post from database.
 @app.get("/posts")
-async def get_posts():
-    cursor.execute("""SELECT * FROM posts;""")
-    posts = cursor.fetchall()
+async def get_posts(db: Session = Depends(get_db)):
+    posts = db.query(sql_models.Post).all()
     return {"data": posts}
 
-# Create new post. For data modification operations (INSERT, UPDATE, DELETE) use RETURNING to  modified data. INSERT statement to insert new post into the "posts" table. The values for the post's title, content, and published status are provided as parameters using %s placeholders in the SQL query. The RETURNING * used to retrieve the newly inserted post from the database after insertion. INSERT statement fetches the newly inserted post from the database using the fetchone() method. fetchone() retrieves the next row of a query result set as a single tuple. conn.commit() saves the transaction to the database.
+# Create new post. 
 @app.post("/posts", status_code=status.HTTP_201_CREATED)
-async def create_post(post : Post):  # validation: client can only pass post object
-    cursor.execute("""INSERT INTO posts (title, content, published) VALUES (%s, %s, %s) RETURNING *;""", (post.title, post.content, post.published))
-    new_post = cursor.fetchone()
-    conn.commit()
+async def create_post(post : pydantic_models.PostCreate, db: Session = Depends(get_db)):
+    new_post = sql_models.Post(**dict(post))
+    db.add(new_post)
+    db.commit()
+    db.refresh(new_post)
     return {"data": new_post}
 
 # client provide a path param 'id' to retrieve individual post. Path param passed SQL query, if not found raise http exception built in to fastapi, if found return post
 @app.get("/posts/{id}")
-async def get_post(id: int): # validation: client can only pass int
-    cursor.execute("""SELECT * FROM posts WHERE id = %s; """, str(id))
-    post = cursor.fetchone()
+async def get_post(id: int, db: Session = Depends(get_db)): # validation: client can only pass int
+    post = db.query(sql_models.Post).filter(sql_models.Post.id == id).first()
     if not post:
         raise HTTPException(
             status_code = status.HTTP_404_NOT_FOUND, 
@@ -108,24 +65,28 @@ async def get_post(id: int): # validation: client can only pass int
     return {"post_details": post}
 
 
-# delete individual post. Uses find index post function which returns the index of post with passed in id, if index exists pop index from my post list and return 204 response. For (INSERT, UPDATE, DELETE) use commit() to save transaction to database.
+# delete individual post. Query for post with specific id. if it doesnt exist throw an error. if it does delete post and commit changes to db
 @app.delete("/posts/{id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_post(id: int): # validation: client can only pass int
-    cursor.execute("""DELETE FROM posts WHERE id = %s RETURNING *; """, str(id))
-    deleted_post = cursor.fetchone()
-    conn.commit()
-    if delete_post == None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id: {id} does not exist")
-
+async def delete_post(id: int,  db: Session = Depends(get_db)): # validation: client can only pass int
+    deleted_post = db.query(sql_models.Post).filter(sql_models.Post.id == id)
+    if deleted_post.first() == None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"post with id: {id} does not exist"
+            )
+    deleted_post.delete(synchronize_session=False)
+    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-# Update individual post. client request id for specifc post, pass updated values in SQL query with specifc up. For (INSERT, UPDATE, DELETE) use commit() to save transaction to database. then returns new post.
+# Update individual post. Query for post with specific id. if it doesnt exist throw an error. if it does chain update() method to found query and update post with passed in field from post. turn into dictionary with dict(post) and commit changes to db
 @app.put("/posts/{id}")
-async def update_posts(id: int, post: Post): # validation: client can only pass int and post object
-    cursor.execute("""UPDATE posts SET title = %s, content = %s, published = %s WHERE id = %s RETURNING *;""", (post.title, post.content, post.published, str(id)))
-    updated_post = cursor.fetchone()
-    conn.commit()
-    if updated_post == None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id: {id} does not exist")
-
-    return {"data": updated_post}
+async def update_posts(id: int, post: pydantic_models.PostCreate, db: Session = Depends(get_db)): # validation: client can only pass int and post object
+    post_query = db.query(sql_models.Post).filter(sql_models.Post.id == id)
+    if post_query.first() == None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"post with id: {id} does not exist"
+        )
+    post_query.update(dict(post), synchronize_session=False)
+    db.commit()
+    return {"data": post_query.first()}

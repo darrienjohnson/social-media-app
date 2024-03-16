@@ -4,6 +4,7 @@ from sqlalchemy import Column, Integer, String, Boolean
 from sqlalchemy.sql.sqltypes import TIMESTAMP
 from .database import Base
 
+# models represent tables to be created in the database
 class Post(Base):
     __tablename__ = "posts"
 
