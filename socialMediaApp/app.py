@@ -1,3 +1,4 @@
+from typing import Optional, List
 from fastapi import FastAPI, Response, status, HTTPException, Depends
 from fastapi.params import Body
 from random import randrange
@@ -39,22 +40,22 @@ def test_posts(db: Session = Depends(get_db)):
 
 
 # Retrieve all post from database.
-@app.get("/posts")
+@app.get("/posts", response_model=List[pydantic_models.PostResponse])
 async def get_posts(db: Session = Depends(get_db)):
     posts = db.query(sql_models.Post).all()
-    return {"data": posts}
+    return posts
 
 # Create new post. 
-@app.post("/posts", status_code=status.HTTP_201_CREATED)
+@app.post("/posts", status_code=status.HTTP_201_CREATED, response_model=pydantic_models.PostResponse)
 async def create_post(post : pydantic_models.PostCreate, db: Session = Depends(get_db)):
     new_post = sql_models.Post(**dict(post))
     db.add(new_post)
     db.commit()
     db.refresh(new_post)
-    return {"data": new_post}
+    return new_post
 
 # client provide a path param 'id' to retrieve individual post. Path param passed SQL query, if not found raise http exception built in to fastapi, if found return post
-@app.get("/posts/{id}")
+@app.get("/posts/{id}", response_model=pydantic_models.PostResponse)
 async def get_post(id: int, db: Session = Depends(get_db)): # validation: client can only pass int
     post = db.query(sql_models.Post).filter(sql_models.Post.id == id).first()
     if not post:
@@ -62,7 +63,7 @@ async def get_post(id: int, db: Session = Depends(get_db)): # validation: client
             status_code = status.HTTP_404_NOT_FOUND, 
             detail = f"post with id: {id} was not found"
             )
-    return {"post_details": post}
+    return post
 
 
 # delete individual post. Query for post with specific id. if it doesnt exist throw an error. if it does delete post and commit changes to db
@@ -79,7 +80,7 @@ async def delete_post(id: int,  db: Session = Depends(get_db)): # validation: cl
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 # Update individual post. Query for post with specific id. if it doesnt exist throw an error. if it does chain update() method to found query and update post with passed in field from post. turn into dictionary with dict(post) and commit changes to db
-@app.put("/posts/{id}")
+@app.put("/posts/{id}", response_model=pydantic_models.PostResponse)
 async def update_posts(id: int, post: pydantic_models.PostCreate, db: Session = Depends(get_db)): # validation: client can only pass int and post object
     post_query = db.query(sql_models.Post).filter(sql_models.Post.id == id)
     if post_query.first() == None:
@@ -89,4 +90,4 @@ async def update_posts(id: int, post: pydantic_models.PostCreate, db: Session = 
         )
     post_query.update(dict(post), synchronize_session=False)
     db.commit()
-    return {"data": post_query.first()}
+    return post_query.first()

@@ -1,4 +1,8 @@
+from sys import deactivate_stack_trampoline
+from typing import Optional
+from xmlrpc.client import boolean
 from pydantic import BaseModel
+from datetime import datetime
 
 from socialMediaApp.sql_models import Post
 
@@ -10,3 +14,11 @@ class PostBase(BaseModel):
 
 class PostCreate(PostBase):
     pass
+
+# Pydantic's orm_modde will tell pydantic model to read the data even if it is not a dict but an ORM model (or any other arbitrary object with attributes) inherits title, content, and publish from base class
+class PostResponse(PostBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        orm_mode = True
