@@ -67,7 +67,7 @@ async def get_post(id: int, db: Session = Depends(get_db)): # validation: client
 
 
 # delete individual post. Query for post with specific id. if it doesnt exist throw an error. if it does delete post and commit changes to db
-@app.delete("/posts/{id}", status_code=status.HTTP_204_NO_CONTENT)
+@app.delete("/posts/{id}", status_code=status.HTTP_204_NO_CONTENT, response_model=pydantic_models.UserOut)
 async def delete_post(id: int,  db: Session = Depends(get_db)): # validation: client can only pass int
     deleted_post = db.query(sql_models.Post).filter(sql_models.Post.id == id)
     if deleted_post.first() == None:
