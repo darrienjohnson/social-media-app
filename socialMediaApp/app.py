@@ -91,3 +91,12 @@ async def update_posts(id: int, post: pydantic_models.PostCreate, db: Session = 
     post_query.update(dict(post), synchronize_session=False)
     db.commit()
     return post_query.first()
+
+
+@app.post("/users", status_code=status.HTTP_201_CREATED)
+def create_user(user: pydantic_models.UserCreate, db: Session = Depends(get_db)):
+    new_user = sql_models.User(**dict(user))
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user

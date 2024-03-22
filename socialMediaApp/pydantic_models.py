@@ -1,7 +1,7 @@
 from sys import deactivate_stack_trampoline
 from typing import Optional
 from xmlrpc.client import boolean
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from datetime import datetime
 
 from socialMediaApp.sql_models import Post
@@ -21,4 +21,8 @@ class PostResponse(PostBase):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str

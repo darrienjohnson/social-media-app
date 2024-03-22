@@ -1,4 +1,4 @@
-from sqlalchemy import text
+from sqlalchemy import null, text
 from email import contentmanager
 from sqlalchemy import Column, Integer, String, Boolean
 from sqlalchemy.sql.sqltypes import TIMESTAMP
@@ -16,3 +16,7 @@ class Post(Base):
 
 class User(Base):
     __tablename__= "users"
+    email = Column(String, nullable=False, unique=True)
+    password = Column(String, nullable=False)
+    id = Column(Integer, primary_key=True, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
